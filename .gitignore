@@ -1,0 +1,5 @@
+.idea
+.build_release
+release
+__pycache__
+
