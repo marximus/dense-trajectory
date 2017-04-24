@@ -1,6 +1,6 @@
 # SPECIFIC TO MY MACHINE
-PREFIX=/home/maurice/miniconda3/envs/cilia
-PYTHON_VER=3.6m
+PREFIX=/home/mam588/miniconda3/envs/cilia
+PYTHON_VER=3.5m
 
 # set the binaries that have to be built
 # TARGETS := DenseTrack Video
