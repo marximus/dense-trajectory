@@ -4,19 +4,12 @@ See Also
 http://starship.python.net/crew/theller/ctypes/tutorial.html
 https://docs.python.org/3/library/ctypes.html
 """
-
 import ctypes
 import os
-from os.path import join, basename, splitext
-from joblib import Parallel, delayed
 
 import numpy as np
 import pandas as pd
 from numpy.ctypeslib import ndpointer
-
-# from extras import cache
-# from extras.arrfuncs import stack_structured_arrays
-# from extras.progress import progress_bar
 
 
 PARENTDIR = os.path.dirname(__file__)
@@ -43,10 +36,19 @@ _densetrack.argtypes = [
 _densetrack.restype = ctypes.py_object
 
 
-def densetrack(video, track_length=15, min_distance=5, patch_size=32, nxy_cell=2, nt_cell=3,
-               scale_num=8, init_gap=1, 
-               poly_n=7, poly_sigma=1.5,  # used in Farneback method in C++ code
-               outfile=None):
+def densetrack(
+        video,
+        track_length=15,
+        min_distance=5,
+        patch_size=32,
+        nxy_cell=2,
+        nt_cell=3,
+        scale_num=8,
+        init_gap=1,
+        poly_n=7,
+        poly_sigma=1.5,  # used in Farneback method in C++ code
+        ret_type='array'
+):
     """
     Compute dense trajectories for video.
 
@@ -97,12 +99,14 @@ def densetrack(video, track_length=15, min_distance=5, patch_size=32, nxy_cell=2
         The number of maximal spatial scales.
     init_gap : int
         The gap for re-sampling feature points.
+    poly_n : int
+    poly_sigma : float
     ret_type : str
         Type of returned trajectories. Must be 'list', 'dataframe', or 'array'.
 
     Returns
     -------
-    tracks : structured numpy.array or str
+    tracks : type specified by ret_type
         Dense trajectories. Type of returned value depends on `ret_type`.
     """
     ret_fields = ('frame_num', 'mean_x', 'mean_y', 'var_x', 'var_y', 'length',
@@ -115,202 +119,25 @@ def densetrack(video, track_length=15, min_distance=5, patch_size=32, nxy_cell=2
     if not video.flags['C_CONTIGUOUS']:
         video = np.ascontiguousarray(video)
 
-    # all Python types except integers, strings, and bytes objects have to be wrapped in their
-    # corresponding ctypes type, so that they can be converted to the required C data type.
-    # https://docs.python.org/3.6/library/ctypes.html#calling-functions-continued
-    #poly_sigma = ctypes.c_double(poly_sigma)
-    #print('Python - poly_n: {}'.format(poly_n))
-    #print('Python - poly_sigma: {}'.format(poly_sigma))
-    #print()
-
     data = _densetrack(
         video, video.shape[0], video.shape[1], video.shape[2],
         track_length, min_distance, patch_size, nxy_cell, nt_cell, scale_num, init_gap,
         poly_n, poly_sigma
     )
 
-    # if ret_type == 'list':
-    #     tracks = [dict(zip(ret_fields, track)) for track in data]
-    # elif ret_type == 'dataframe':
-    #     tracks = pd.DataFrame(data, columns=ret_fields)
-    # elif ret_type == 'array':
-    types = (np.int, np.float, np.float, np.float, np.float, np.float, np.float,
-             np.float, np.float, np.float, np.float, np.float, np.float, np.float,
-             np.float, np.float)
-    shapes = (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, (track_length+1,2), (track_length,2),
-              8*nxy_cell*nxy_cell*nt_cell, 9*nxy_cell*nxy_cell*nt_cell, 8*nxy_cell*nxy_cell*nt_cell,
-              8*nxy_cell*nxy_cell*nt_cell)
-    assert len(types) == len(ret_fields) == len(shapes)
-    tracks = np.array(data, dtype=list(zip(ret_fields, types, shapes)))
-    # else:
-    #     raise ValueError("ret_type must be 'list' or 'dict'")
-
-    if outfile is not None:
-        np.save(outfile, tracks)
-        return outfile
+    if ret_type == 'list':
+        tracks = [dict(zip(ret_fields, track)) for track in data]
+    elif ret_type == 'dataframe':
+        tracks = pd.DataFrame(data, columns=ret_fields)
+    elif ret_type == 'array':
+        types = (np.int, np.float, np.float, np.float, np.float, np.float, np.float,
+                 np.float, np.float, np.float, np.float, np.float, np.float, np.float,
+                 np.float, np.float)
+        shapes = (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, (track_length+1,2), (track_length,2),
+                  8*nxy_cell*nxy_cell*nt_cell, 9*nxy_cell*nxy_cell*nt_cell, 8*nxy_cell*nxy_cell*nt_cell,
+                  8*nxy_cell*nxy_cell*nt_cell)
+        tracks = np.array(data, dtype=list(zip(ret_fields, types, shapes)))
     else:
-        return tracks
+        raise ValueError("ret_type must be 'list', 'dataframe' or 'array'")
 
-
-def compute(roipath, track_dir, overwrite=False, **track_kws):
-    """
-    Compute trajectories from rois.
-    
-    Parameters
-    ----------
-    roipath : seq of str
-        Sequence of paths to .npy files containing 3D video array. 
-    track_dir : str
-        Path of output directory.
-    overwrite : bool
-    track_kws : 
-        Keyword arguments passed to densetrack.
-    
-    Returns
-    -------
-    tracks : seq of str
-        Sequence of paths to .npy files of tracks for corresponding ROIs.
-    """
-    roipath = np.array(roipath)
-    trackpath = np.array([join(track_dir, basename(f)) for f in roipath])
-
-    mask = np.array([True if overwrite or not os.path.exists(path) else False
-                     for path in trackpath])
-
-    if not os.path.exists(track_dir):
-        os.makedirs(track_dir)
-
-    Parallel(n_jobs=-1, verbose=100)(delayed(densetrack)(
-        rpath, outfile=tpath, **track_kws
-    ) for rpath, tpath in zip(roipath[mask], trackpath[mask]))
-
-    return trackpath
-
-
-# def _compute_or_load_tracks(args):
-#     """
-#     ** This should NOT be called directly. It is used in compute function **
-#
-#     Compute dense trajectories for a video.
-#
-#     If `cache_dir` is specified, the trajectories for a video will only be computed if no
-#     entry exists in the cache for the given `vid_path`.
-#
-#     `func_kwargs` will be passed to function computing trajectories.
-#
-#     Parameters
-#     ----------
-#     vid_path : str
-#         Path to .npy file of video.
-#     cache_dir : str or None
-#         Path to cache directory, or None if no cache should be used.
-#     func_kwargs : dict
-#         Keyword arguments passed to function that computes trajectories.
-#
-#     Returns
-#     -------
-#     vid_path : str
-#         Same as input.
-#     vid_tracks : structured array
-#         Dense trajectories for video.
-#     """
-#     vid_path, cache_dir, func_kwargs = args
-#
-#     if cache_dir:
-#         cache_key = vid_path.replace('/', '_').replace('.', '_') + '.npy'
-#         cache_path = os.path.join(cache_dir, cache_key)
-#
-#         if os.path.exists(cache_path):  # Load trajectories from cache
-#             vid_tracks = np.load(cache_path)
-#         else:  # Compute trajectories and save to cache
-#             frames = np.load(vid_path)
-#             vid_tracks = densetrack(frames, **func_kwargs)
-#             np.save(cache_path, vid_tracks)
-#     else:  # Compute trajectories
-#         frames = np.load(vid_path)
-#         vid_tracks = densetrack(frames, **func_kwargs)
-#
-#     return vid_path, vid_tracks
-#
-#
-# def compute(rois, cache_root=None, inherit_fields=None, show_progress=False, **kwargs):
-#     """
-#     Compute dense trajectories for ROIs.
-#
-#     `rois` is a pandas.DataFrame that must have a column named 'video', which contains the paths to the
-#     .npy video files of the ROIs.
-#
-#     If `inherit_fields` is not None, it should contain the attributes (column names of pandas.DataFrame)
-#     of the ROIs which should be inherited by the dense trajectories. The returned dense trajectories will
-#     have the fields specified in `inherit_fields`.
-#
-#     Any extra keyword arguments will be passed to the _compute function.
-#
-#     If `cache_root` is not None, the ROIs will be cached (using their .npy video paths as keys) for each unique
-#     set of `kwargs`. For each unique set of `kwargs`, a directory will be created in `cache_root` that contains
-#     the cached dense trajectories of the ROIs.
-#
-#     Parameters
-#     ----------
-#     rois : pandas.DataFrame
-#         ROIs for which to compute dense trajectories. The DataFrame must have the column 'video', which
-#         contains the paths to the .npy video files of the ROIs.
-#     cache_root : str
-#         Directory in which to cache the results based on .npy file path and kwargs.
-#     inherit_fields : list of str or None
-#         If not None, the attributes of the ROIs that will be inherited by the dense trajectories. They must
-#         be column names of the ROIs in `rois`.
-#     show_progress : bool
-#         If True, show progress bar while computing dense trajectories.
-#     **kwargs
-#         Arguments passed to the _compute function. See the _compute function for details.
-#
-#     Returns
-#     -------
-#     tracks : structured ndarray
-#         Dense trajectories as a structured ndarray, where the fields are attributes of the dense
-#         trajectories. Any columns in `rois` will be inherited by the dense trajectories.
-#     """
-#     # Update default parameters with user supplied kwargs. The parameters will be used to create a separate
-#     # cache for each different combination of parameters.
-#     params = dict(
-#         track_length=15, min_distance=5, patch_size=32, nxy_cell=2, nt_cell=3,
-#         scale_num=8, init_gap=1, poly_n=5, poly_sigma=1.1
-#     )
-#
-#     for arg in kwargs.keys():
-#         if arg not in params:
-#             raise ValueError('Invalid keyword argument: {}'.format(arg))
-#     params.update(kwargs)
-#
-#     # Create the directory in which to cache the dense trajectories for this specific set of parameters.
-#     cache_dir = cache.get_cache_dir(cache_root, params) if cache_root else None
-#
-#     # Compute the dense trajectories
-#     tracks = dict()
-#     with multiprocessing.Pool() as pool:
-#         fargs = list(zip(rois['video'], [cache_dir]*len(rois['video']), [params]*len(rois['video'])))
-#         for i, (vid_path, vid_tracks) in enumerate(pool.imap_unordered(_compute_or_load_tracks, fargs)):
-#             tracks[vid_path] = vid_tracks
-#             if show_progress:
-#                 progress_bar(i+1, len(fargs))
-#     tracks = [tracks[vid_path] for vid_path in rois['video']]
-#
-#     # Stack the dense trajectories into a single numpy structured array. Any attributes
-#     # of the ROIs will be inherited by their corresponding dense trajectories.
-#     fields = [(name, rois[name].values) for name in inherit_fields] if inherit_fields else []
-#     tracks = stack_structured_arrays(tracks, append_fields=fields)
-#
-#     # Remove any trajectories with nans.
-#     nan_indices = []
-#     for field in tracks.dtype.names:
-#         if tracks[field].dtype.descr[0][1] != '|O':  # skip numpy arrays containing objects
-#             nan_ind = np.where(np.isnan(tracks[field]))[0]
-#             nan_indices.extend(nan_ind)
-#     if len(nan_indices) > 0:
-#         nan_indices = np.unique(nan_indices)
-#         print('Removing {} trajectories with nan'.format(len(nan_indices)))
-#         tracks = np.delete(tracks, nan_indices, axis=0)
-#
-#     return tracks
-
+    return tracks
