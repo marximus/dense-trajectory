@@ -49,37 +49,7 @@ def densetrack(
         poly_sigma=1.5,  # used in Farneback method in C++ code
         ret_type='array'
 ):
-    """
-    Compute dense trajectories for video.
-
-    The returned trajectories will have the following attributes:
-
-        frame_num
-            The trajectory ends on which frame.
-        mean_x
-            The mean value of the x coordinates of the trajectory.
-        mean_y
-            The mean value of the y coordinates of the trajectory.
-        var_x
-            The variance of the x coordinates of the trajectory.
-        var_y
-            The variance of the y coordinates of the trajectory.
-        length
-            The length of the trajectory.
-        scale
-            The trajectory is computed on which scale.
-        x_pos
-            The normalized x position w.r.t. the video (0~0.999), for spatio-temporal pyramid.
-        y_pos
-            The normalized y position w.r.t. the video (0~0.999), for spatio-temporal pyramid.
-        t_pos
-            The normalized t position w.r.t. the video (0~0.999), for spatio-temporal pyramid.
-
-        trajectory: shape (2x[trajectory length]) (default 30 dimension)
-        HOG: ndarray, shape (8x[spatial cells]x[spatial cells]x[temporal cells] (default 96 dimension)
-        HOF: 9x[spatial cells]x[spatial cells]x[temporal cells] (default 108 dimension)
-        MBHx: 8x[spatial cells]x[spatial cells]x[temporal cells] (default 96 dimension)
-        MBHy: 8x[spatial cells]x[spatial cells]x[temporal cells] (default 96 dimension)
+    """Compute dense trajectories for video.
 
     Parameters
     ----------
@@ -108,6 +78,33 @@ def densetrack(
     -------
     tracks : type specified by ret_type
         Dense trajectories. Type of returned value depends on `ret_type`.
+
+    The returned trajectories will have the following attributes:
+        frame_num
+            The trajectory ends on which frame.
+        mean_x
+            The mean value of the x coordinates of the trajectory.
+        mean_y
+            The mean value of the y coordinates of the trajectory.
+        var_x
+            The variance of the x coordinates of the trajectory.
+        var_y
+            The variance of the y coordinates of the trajectory.
+        length
+            The length of the trajectory.
+        scale
+            The trajectory is computed on which scale.
+        x_pos
+            The normalized x position w.r.t. the video (0~0.999), for spatio-temporal pyramid.
+        y_pos
+            The normalized y position w.r.t. the video (0~0.999), for spatio-temporal pyramid.
+        t_pos
+            The normalized t position w.r.t. the video (0~0.999), for spatio-temporal pyramid.
+        trajectory: shape (2x[trajectory length]) (default 30 dimension)
+        HOG: ndarray, shape (8x[spatial cells]x[spatial cells]x[temporal cells] (default 96 dimension)
+        HOF: 9x[spatial cells]x[spatial cells]x[temporal cells] (default 108 dimension)
+        MBHx: 8x[spatial cells]x[spatial cells]x[temporal cells] (default 96 dimension)
+        MBHy: 8x[spatial cells]x[spatial cells]x[temporal cells] (default 96 dimension)
     """
     ret_fields = ('frame_num', 'mean_x', 'mean_y', 'var_x', 'var_y', 'length',
                   'scale', 'x_pos', 'y_pos', 't_pos', 'coords', 'trajectory',
