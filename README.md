@@ -1,8 +1,9 @@
 # Dense Trajectory
-Python wrapper (using ctypes) for dense trajectory code from http://lear.inrialpes.fr/people/wang/dense_trajectories.
+Python wrapper for dense trajectory code downloaded from [this link](http://lear.inrialpes.fr/people/wang/download/dense_trajectory_release_v1.2.tar.gz).
 
-The directory [dense_trajectory_release_v1.2](dense_trajectory_release_v1.2) contains dense trajectory code downloaded from 
-[this link](http://lear.inrialpes.fr/people/wang/download/dense_trajectory_release_v1.2.tar.gz) with the following modifications:
+Project Homepage: http://lear.inrialpes.fr/people/wang/dense_trajectories
+
+The directory [dense_trajectory_release_v1.2](dense_trajectory_release_v1.2) contains the dense trajectory code with the following modifications:
   - [DenseTrack.cpp](dense_trajectory_release_v1.2/DenseTrack.cpp): Changed main function to accept options as parameters to function, rather than reading them from
           the command line. It was also modified to return a python object with the results, rather than printing results
           to standard output.
