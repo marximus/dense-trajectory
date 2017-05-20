@@ -1,6 +1,12 @@
-# SPECIFIC TO MY MACHINE
+#############################################################################
+# PREFIX is the prefix to a conda environment and PYTHON_VER is the python
+# version used in the conda environment.
+# The variables below are specific to my machine and need to be changed by the
+# user compiling. They are left as an example.
+#############################################################################
 PREFIX=/home/mam588/miniconda3/envs/cilia
 PYTHON_VER=3.5m
+
 
 # set the binaries that have to be built
 # TARGETS := DenseTrack Video
