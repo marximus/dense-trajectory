@@ -11,6 +11,10 @@ import numpy as np
 import pandas as pd
 from numpy.ctypeslib import ndpointer
 
+# for read_video
+os.environ['IMAGEIO_FFMPEG_EXE'] = '/home/mam588/miniconda3/envs/cilia/bin/ffmpeg'  # for imageio
+import imageio
+import cv2
 
 PARENTDIR = os.path.dirname(__file__)
 LIBPATH = os.path.join(PARENTDIR, "dense_trajectory_release_v1.2", "release", "DenseTrack.so")
@@ -47,7 +51,6 @@ def densetrack(
         init_gap=1,
         poly_n=7,
         poly_sigma=1.5,  # used in Farneback method in C++ code
-        ret_type='array'
 ):
     """Compute dense trajectories for video.
 
@@ -71,8 +74,6 @@ def densetrack(
         The gap for re-sampling feature points.
     poly_n : int
     poly_sigma : float
-    ret_type : str
-        Type of returned trajectories. Must be 'list', 'dataframe', or 'array'.
 
     Returns
     -------
@@ -106,12 +107,9 @@ def densetrack(
         MBHx: 8x[spatial cells]x[spatial cells]x[temporal cells] (default 96 dimension)
         MBHy: 8x[spatial cells]x[spatial cells]x[temporal cells] (default 96 dimension)
     """
-    ret_fields = ('frame_num', 'mean_x', 'mean_y', 'var_x', 'var_y', 'length',
+    ret_fields = ['frame_num', 'mean_x', 'mean_y', 'var_x', 'var_y', 'length',
                   'scale', 'x_pos', 'y_pos', 't_pos', 'coords', 'trajectory',
-                  'hog', 'hof', 'mbh_x', 'mbh_y')
-
-    if isinstance(video, str):
-        video = np.load(video)
+                  'hog', 'hof', 'mbh_x', 'mbh_y']
 
     if not video.flags['C_CONTIGUOUS']:
         video = np.ascontiguousarray(video)
@@ -122,19 +120,70 @@ def densetrack(
         poly_n, poly_sigma
     )
 
-    if ret_type == 'list':
-        tracks = [dict(zip(ret_fields, track)) for track in data]
-    elif ret_type == 'dataframe':
-        tracks = pd.DataFrame(data, columns=ret_fields)
-    elif ret_type == 'array':
-        types = (np.int, np.float, np.float, np.float, np.float, np.float, np.float,
-                 np.float, np.float, np.float, np.float, np.float, np.float, np.float,
-                 np.float, np.float)
-        shapes = (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, (track_length+1,2), (track_length,2),
-                  8*nxy_cell*nxy_cell*nt_cell, 9*nxy_cell*nxy_cell*nt_cell, 8*nxy_cell*nxy_cell*nt_cell,
-                  8*nxy_cell*nxy_cell*nt_cell)
-        tracks = np.array(data, dtype=list(zip(ret_fields, types, shapes)))
-    else:
-        raise ValueError("ret_type must be 'list', 'dataframe' or 'array'")
+    # tracks = [dict(zip(ret_fields, track)) for track in data]  # uncomment to return list
+    # tracks = pd.DataFrame(data, columns=ret_fields)  # uncomment to return dataframe
+
+    types = (np.int, np.float, np.float, np.float, np.float, np.float, np.float,
+             np.float, np.float, np.float, np.float, np.float, np.float, np.float,
+             np.float, np.float)
+    shapes = (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, (track_length+1,2), (track_length,2),
+              8*nxy_cell*nxy_cell*nt_cell, 9*nxy_cell*nxy_cell*nt_cell, 8*nxy_cell*nxy_cell*nt_cell,
+              8*nxy_cell*nxy_cell*nt_cell)
+    tracks = np.array(data, dtype=list(zip(ret_fields, types, shapes)))
 
     return tracks
+
+
+def densetrack_fileio(infile, outfile, max_frames=None, **kwargs):
+    """
+    Load video from infile, compute trajectories and save trajectories to outfile. 
+    
+    Parameters
+    ----------
+    infile : str
+        Video file. Must be one of: .npy or .mov, .avi, .mpg, .mpeg, .mp4, .mkv, .wmv.
+    outfile : str
+        Path where trajectories will be saved as numpy array. Must have extension .npy.
+    max_frames : int or None
+        Maximum number of frames to compute trajectories for. If None, they will be 
+        computed for all frames.
+    **kwargs : keyword arguments
+        Keyword arguments are passed to densetrack function.
+    
+    Returns
+    -------
+    None
+    """
+    infile_ext = os.path.splitext(infile)[1]
+    if infile_ext == '.npy':
+        video = np.load(infile)
+        video = video[:max_frames]
+    elif infile_ext in ('.mov', '.avi', '.mpg', '.mpeg', '.mp4', '.mkv', '.wmv'):
+        video = read_video(infile, max_frames)
+    else:
+        raise ValueError('infile has unsupported extension')
+
+    outfile_ext = os.path.splitext(outfile)[1]
+    if outfile_ext != '.npy':
+        raise ValueError('outfile must be a .npy file')
+
+    tracks = densetrack(video, **kwargs)
+    np.save(outfile, tracks)
+
+
+def read_video(filename, max_frames=None):
+    reader = imageio.get_reader(filename)
+
+    nframes = reader.get_meta_data()['nframes']
+    width, height = reader.get_meta_data()['size']
+
+    nframes = min(nframes, np.inf if max_frames is None else max_frames)
+
+    video = np.zeros((nframes, height, width), dtype=np.uint8)
+    for i, im in enumerate(reader):
+        if i == nframes:
+            break
+        gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+        video[i] = gray
+
+    return video
