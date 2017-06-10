@@ -12,6 +12,66 @@ from joblib import Parallel, delayed
 sys.path.append(dirname(dirname(abspath(__file__))))
 import densetrack
 
+# for read_video function
+os.environ['IMAGEIO_FFMPEG_EXE'] = '/home/mam588/miniconda3/envs/cilia/bin/ffmpeg'  # for imageio
+import imageio
+import cv2
+
+
+def densetrack_fileio(infile, outfile, max_frames=None, **kwargs):
+    """
+    Load video from infile, compute trajectories and save trajectories to outfile. 
+    
+    Parameters
+    ----------
+    infile : str
+        Video file. Must be one of: .npy or .mov, .avi, .mpg, .mpeg, .mp4, .mkv, .wmv.
+    outfile : str
+        Path where trajectories will be saved as numpy array. Must have extension .npy.
+    max_frames : int or None
+        Maximum number of frames to compute trajectories for. If None, they will be 
+        computed for all frames.
+    **kwargs : keyword arguments
+        Keyword arguments are passed to densetrack function.
+    
+    Returns
+    -------
+    None
+    """
+    infile_ext = os.path.splitext(infile)[1]
+    if infile_ext == '.npy':
+        video = np.load(infile)
+        video = video[:max_frames]
+    elif infile_ext in ('.mov', '.avi', '.mpg', '.mpeg', '.mp4', '.mkv', '.wmv'):
+        video = read_video(infile, max_frames)
+    else:
+        raise ValueError('infile has unsupported extension')
+
+    outfile_ext = os.path.splitext(outfile)[1]
+    if outfile_ext != '.npy':
+        raise ValueError('outfile must be a .npy file')
+
+    tracks = densetrack.densetrack(video, **kwargs)
+    np.save(outfile, tracks)
+
+
+def read_video(filename, max_frames=None):
+    reader = imageio.get_reader(filename)
+
+    nframes = reader.get_meta_data()['nframes']
+    width, height = reader.get_meta_data()['size']
+
+    nframes = min(nframes, np.inf if max_frames is None else max_frames)
+
+    video = np.zeros((nframes, height, width), dtype=np.uint8)
+    for i, im in enumerate(reader):
+        if i == nframes:
+            break
+        gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+        video[i] = gray
+
+    return video
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
