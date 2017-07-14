@@ -141,6 +141,6 @@ if __name__ == '__main__':
         print('Creating {}'.format(outdir))
         os.makedirs(outdir)
 
-    Parallel(n_jobs=args.n_jobs, verbose=30)(delayed(densetrack.densetrack_fileio)(
+    Parallel(n_jobs=args.n_jobs, verbose=30)(delayed(densetrack_fileio)(
         ifile, ofile, args.max_frames, **args_track
     ) for ifile, ofile in zip(infile, outfile))
