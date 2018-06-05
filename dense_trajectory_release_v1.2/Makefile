@@ -1,7 +1,7 @@
 #############################################################################
 # PREFIX is the prefix to a conda environment and PYTHON_VER is the python
 # version used in the conda environment.
-# The variables below are specific to my machine and need to be changed by the
+# PREFIX and PYTHON_VER are specific to my machine and need to be changed by the
 # user compiling. They are left as an example.
 #############################################################################
 PREFIX=/home/mam588/miniconda3/envs/cilia
