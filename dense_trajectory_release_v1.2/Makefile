@@ -28,7 +28,7 @@ LIBS := \
 	python${PYTHON_VER}
 
 # set some flags and compiler/linker specific commands
-CXXFLAGS = -pipe -D __STDC_CONSTANT_MACROS -D STD=std -Wall $(CXXFLAGS_$(BUILD)) -I. -I/opt/include \
+CXXFLAGS = -pipe -D __STDC_CONSTANT_MACROS -D STD=std -Wall $(CXXFLAGS_$(BUILD)) -I. \
 		   -I${PREFIX}/include \
 		   -I${PREFIX}/include/python${PYTHON_VER}
 CXXFLAGS_debug := -ggdb
