@@ -16,7 +16,7 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
                      int _scale_num, int _init_gap, 
                      int _poly_n, double _poly_sigma)
 {
-    //fprintf(stderr, "C++ - poly_sigma: %f\n", _poly_sigma);
+//	fprintf(stderr, "C++ - poly_sigma: %f\n", _poly_sigma);
 
 	// See http://stackoverflow.com/questions/35774011/segment-fault-when-creating-pylist-new-in-python-c-extention
 	// for why we need line of code below
@@ -24,9 +24,9 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 
 	// create a vector of cv::mat to hold frames of video
 	std::vector<Mat> video;
-    for (size_t k = 0; k < len; k++) {
+	for (size_t k = 0; k < len; k++) {
 		Mat frame = Mat(rows, cols, CV_8UC1, (frames + k*rows*cols));
-        video.push_back(frame);
+		video.push_back(frame);
 	}
 
 	track_length = _track_length;
@@ -123,7 +123,7 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 //			frame.copyTo(image);
 //			cvtColor(image, prev_grey, CV_BGR2GRAY);
 			frame.copyTo(prev_grey);
-            cvtColor(frame, image, CV_GRAY2BGR);
+			cvtColor(frame, image, CV_GRAY2BGR);
 
 			for(int iScale = 0; iScale < scale_num; iScale++) {
 				if(iScale == 0)
@@ -152,7 +152,7 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 		init_counter++;
 //		frame.copyTo(image);
 //		cvtColor(image, grey, CV_BGR2GRAY);
-        frame.copyTo(grey);
+		frame.copyTo(grey);
 		cvtColor(frame, image, CV_GRAY2BGR);
 
 		// compute optical flow for all scales once
@@ -218,7 +218,7 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 
 					// Create a copy of the track coordinates because they are normalized by IsValid() call below.
 					std::vector<Point2f> trajectory_copy(trackInfo.length+1);
-                    for(int i = 0; i <= trackInfo.length; ++i)
+					for(int i = 0; i <= trackInfo.length; ++i)
 						trajectory_copy[i] = iTrack->point[i] * fscales[iScale];
 
 					float mean_x(0), mean_y(0), var_x(0), var_y(0), length(0);
@@ -232,8 +232,8 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 						PyObject *py_track_mbhy = PyList_New(0);
 
 						// output the original trajectory coordinates mapped to original resolution
-                        for (int i = 0; i != trajectory_copy.size(); i++)
-                            PyList_Append(py_track_coords, Py_BuildValue("[ff]", trajectory_copy[i].x, trajectory_copy[i].y));
+						for (int i = 0; i != trajectory_copy.size(); i++)
+							PyList_Append(py_track_coords, Py_BuildValue("[ff]", trajectory_copy[i].x, trajectory_copy[i].y));
 
 						// for spatio-temporal pyramid
 						float x_pos = std::min<float>(std::max<float>(mean_x/float(seqInfo.width), 0), 0.999);
@@ -253,11 +253,11 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 						// Using "N" does NOT increment the reference count. Using "O" WILL increment the reference count
 						// TODO: Need to check if the reference counting below is correct  "(NNNNNNN)"
 //						PyObject *py_track = Py_BuildValue("(NNNNNNN)", py_track_info, py_track_coords,
-                        PyObject *py_track = Py_BuildValue("(ifffffffffNNNNNN)",
-														   frame_num, mean_x, mean_y, var_x, var_y, length,
-														   fscales[iScale], x_pos, y_pos, t_pos,
-														   py_track_coords, py_track_traj, py_track_hog,
-														   py_track_hof, py_track_mbhx, py_track_mbhy);
+						PyObject *py_track = Py_BuildValue("(ifffffffffNNNNNN)",
+										frame_num, mean_x, mean_y, var_x, var_y, length,
+										fscales[iScale], x_pos, y_pos, t_pos,
+										py_track_coords, py_track_traj, py_track_hog,
+										py_track_hof, py_track_mbhx, py_track_mbhy);
 						PyList_Append(py_tracks, py_track);
 					}
 
