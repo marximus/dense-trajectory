@@ -292,24 +292,20 @@ void DrawTrack(const std::vector<Point2f>& point, const int index, const float s
 	circle(image, point0, 2, Scalar(0,0,255), -1, 8, 0);
 }
 
-void PrintDesc(std::vector<float>& desc, DescInfo& descInfo, TrackInfo& trackInfo, PyObject* outList)
+void PrintDesc(std::vector<float>& desc, DescInfo& descInfo, TrackInfo& trackInfo, std::vector<float>& outVec)
 {
-	if (!PyList_Check(outList))
-		fprintf(stderr, "Input is not python list\n");
-	if (PyList_Size(outList) != 0)
-		fprintf(stderr, "Input python list should be empty\n");
-
 	int tStride = cvFloor(trackInfo.length/descInfo.ntCells);
 	float norm = 1./float(tStride);
 	int dim = descInfo.dim;
 	int pos = 0;
+	std::vector<float>(descInfo.ntCells * dim).swap(outVec);
 	for(int i = 0; i < descInfo.ntCells; i++) {
 		std::vector<float> vec(dim);
 		for(int t = 0; t < tStride; t++)
 			for(int j = 0; j < dim; j++)
 				vec[j] += desc[pos++];
 		for(int j = 0; j < dim; j++)
-			PyList_Append(outList, Py_BuildValue("f", vec[j]*norm));
+			outVec[i * dim + j] = vec[j]*norm;
 	}
 }
 
