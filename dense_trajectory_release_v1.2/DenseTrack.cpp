@@ -363,23 +363,26 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 	}
 
 	int cell_size = nxy_cell * nxy_cell * nt_cell;
-	PyObject* dtype = PyList_New(0);
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "frame_num", "i", 1));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mean_x", "f", 1));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mean_y", "f", 1));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "var_x", "f", 1));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "var_y", "f", 1));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "length", "f", 1));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "scale", "f", 1));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "x_pos", "f", 1));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "y_pos", "f", 1));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "t_pos", "f", 1));
-	PyList_Append(dtype, Py_BuildValue("(s, s, (i, i))", "coords", "f", track_length + 1, 2));
-	PyList_Append(dtype, Py_BuildValue("(s, s, (i, i))", "trajectory", "f", track_length, 2));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "hog", "f", 8 * cell_size));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "hof", "f", 9 * cell_size));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mbh_x", "f", 8 * cell_size));
-	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mbh_y", "f", 8 * cell_size));
+	// PyList_Append increases the ref count (unlike PyList_SetItem)
+	// https://stackoverflow.com/questions/3512414/does-this-pylist-appendlist-py-buildvalue-leak
+	PyObject* dtype = PyList_New(16);
+	int idx = 0;
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "frame_num", "i", 1));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "mean_x", "f", 1));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "mean_y", "f", 1));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "var_x", "f", 1));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "var_y", "f", 1));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "length", "f", 1));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "scale", "f", 1));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "x_pos", "f", 1));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "y_pos", "f", 1));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "t_pos", "f", 1));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, (i, i))", "coords", "f", track_length + 1, 2));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, (i, i))", "trajectory", "f", track_length, 2));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "hog", "f", 8 * cell_size));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "hof", "f", 9 * cell_size));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "mbh_x", "f", 8 * cell_size));
+	PyList_SetItem(dtype, idx++, Py_BuildValue("(s, s, i)", "mbh_y", "f", 8 * cell_size));
 	PyArray_Descr* descr;
 	PyArray_DescrConverter(dtype, &descr);
 	Py_DECREF(dtype);
