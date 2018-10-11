@@ -118,13 +118,13 @@ def densetrack(
     # tracks = [dict(zip(ret_fields, track)) for track in data]  # uncomment to return list
     # tracks = pd.DataFrame(data, columns=ret_fields)  # uncomment to return dataframe
 
-    types = (np.int, np.float, np.float, np.float, np.float, np.float, np.float,
-             np.float, np.float, np.float, np.float, np.float, np.float, np.float,
-             np.float, np.float)
-    shapes = (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, (track_length+1,2), (track_length,2),
-              8*nxy_cell*nxy_cell*nt_cell, 9*nxy_cell*nxy_cell*nt_cell, 8*nxy_cell*nxy_cell*nt_cell,
-              8*nxy_cell*nxy_cell*nt_cell)
-    tracks = np.array(data, dtype=list(zip(ret_fields, types, shapes)))
+    # types = (np.int, np.float, np.float, np.float, np.float, np.float, np.float,
+    #          np.float, np.float, np.float, np.float, np.float, np.float, np.float,
+    #          np.float, np.float)
+    # shapes = (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, (track_length+1,2), (track_length,2),
+    #           8*nxy_cell*nxy_cell*nt_cell, 9*nxy_cell*nxy_cell*nt_cell, 8*nxy_cell*nxy_cell*nt_cell,
+    #           8*nxy_cell*nxy_cell*nt_cell)
+    # tracks = np.array(data, dtype=list(zip(ret_fields, types, shapes)))
 
-    return tracks
-
+    # return tracks
+    return data

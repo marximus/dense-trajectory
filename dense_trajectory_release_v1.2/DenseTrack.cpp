@@ -5,9 +5,76 @@
 
 #include <time.h>
 
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/arrayobject.h>
+
 using namespace cv;
 
 int show_track = 0; // set show_track = 1, if you want to visualize the trajectories
+
+namespace {
+	class ValidTrack
+	{
+	public:
+		std::vector<Mat>::size_type frame_num;
+		float mean_x;
+		float mean_y;
+		float var_x;
+		float var_y;
+		float length;
+		float scale;
+		float x_pos;
+		float y_pos;
+		float t_pos;
+		std::vector<Point2f> coords;
+		std::vector<Point2f> traj;
+		std::vector<float> hog;
+		std::vector<float> hof;
+		std::vector<float> mbhX;
+		std::vector<float> mbhY;
+
+		ValidTrack() :
+			frame_num(0), mean_x(0), mean_y(0), var_x(0), var_y(0),
+			length(0), scale(0), x_pos(0), y_pos(0), t_pos(0) {
+		}
+
+		ValidTrack(std::vector<Mat>::size_type frame_num_,
+			float mean_x_, float mean_y_, float var_x_, float var_y_,
+			float length_, float scale_, float x_pos_, float y_pos_, float t_pos_,
+			const std::vector<Point2f>& coords_, const std::vector<Point2f>& traj_,
+			const std::vector<float>& hog_, const std::vector<float>& hof_,
+			const std::vector<float>& mbhX_, const std::vector<float>& mbhY_) :
+			frame_num(frame_num_), mean_x(mean_x_), mean_y(mean_y_),
+			var_x(var_x_), var_y(var_y_), length(length_), scale(scale_),
+			x_pos(x_pos_), y_pos(y_pos_), t_pos(t_pos_), coords(coords_), traj(traj_),
+			hog(hog_), hof(hof_), mbhX(mbhX_), mbhY(mbhY_) {
+		}
+
+		PyObject* toPython() {
+			return Py_BuildValue("(ifffffffffNNNNNN)",
+					frame_num, mean_x, mean_y, var_x, var_y, length,
+					scale, x_pos, y_pos, t_pos,
+					toPython(coords), toPython(traj), toPython(hog),
+					toPython(hof), toPython(mbhX), toPython(mbhY));
+		}
+
+	private:
+		PyObject* toPython(const std::vector<float>& values) {
+			// This could be sped up more by creating a Numpy array here.
+			PyObject* py_list = PyList_New(values.size());
+			for (size_t i = 0; i < values.size(); i++)
+				PyList_SetItem(py_list, i, Py_BuildValue("f", values[i]));
+			return py_list;
+		}
+
+		PyObject* toPython(const std::vector<Point2f>& values) {
+			PyObject* py_list = PyList_New(values.size());
+			for (size_t i = 0; i < values.size(); i++)
+				PyList_SetItem(py_list, i, Py_BuildValue("[ff]", values[i].x, values[i].y));
+			return py_list;
+		}
+	};
+}
 
 extern "C"
 //PyObject* densetrack(char* video, int _start_frame, int _end_frame, int _track_length, int _min_distance,
@@ -16,17 +83,14 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
                      int _scale_num, int _init_gap, 
                      int _poly_n, double _poly_sigma)
 {
-    //fprintf(stderr, "C++ - poly_sigma: %f\n", _poly_sigma);
-
-	// See http://stackoverflow.com/questions/35774011/segment-fault-when-creating-pylist-new-in-python-c-extention
-	// for why we need line of code below
-	PyGILState_STATE gstate = PyGILState_Ensure();
+//	fprintf(stderr, "C++ - poly_sigma: %f\n", _poly_sigma);
 
 	// create a vector of cv::mat to hold frames of video
 	std::vector<Mat> video;
-    for (size_t k = 0; k < len; k++) {
+	video.reserve(len);
+	for (size_t k = 0; k < len; k++) {
 		Mat frame = Mat(rows, cols, CV_8UC1, (frames + k*rows*cols));
-        video.push_back(frame);
+		video.push_back(frame);
 	}
 
 	track_length = _track_length;
@@ -36,12 +100,6 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 	nt_cell = _nt_cell;
 	scale_num = _scale_num;
 	init_gap = _init_gap;
-
-	PyObject *py_tracks = PyList_New(0);
-	if (!py_tracks) {
-		fprintf(stderr, "Error creating python list\n");
-		Py_RETURN_NONE;
-	}
 
 //	VideoCapture capture;
 //	char* video = argv[1];
@@ -85,6 +143,8 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 	std::vector<std::list<Track> > xyScaleTracks;
 	int init_counter = 0; // indicate when to detect new feature points
 
+	std::vector<ValidTrack> valid_tracks;
+
 //	while(true) {
 	for(std::vector<Mat>::size_type frame_num = 0; frame_num != video.size(); frame_num++) {
 		Mat frame;
@@ -123,7 +183,7 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 //			frame.copyTo(image);
 //			cvtColor(image, prev_grey, CV_BGR2GRAY);
 			frame.copyTo(prev_grey);
-            cvtColor(frame, image, CV_GRAY2BGR);
+			cvtColor(frame, image, CV_GRAY2BGR);
 
 			for(int iScale = 0; iScale < scale_num; iScale++) {
 				if(iScale == 0)
@@ -152,7 +212,7 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 		init_counter++;
 //		frame.copyTo(image);
 //		cvtColor(image, grey, CV_BGR2GRAY);
-        frame.copyTo(grey);
+		frame.copyTo(grey);
 		cvtColor(frame, image, CV_GRAY2BGR);
 
 		// compute optical flow for all scales once
@@ -218,47 +278,27 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 
 					// Create a copy of the track coordinates because they are normalized by IsValid() call below.
 					std::vector<Point2f> trajectory_copy(trackInfo.length+1);
-                    for(int i = 0; i <= trackInfo.length; ++i)
+					for(int i = 0; i <= trackInfo.length; ++i)
 						trajectory_copy[i] = iTrack->point[i] * fscales[iScale];
 
 					float mean_x(0), mean_y(0), var_x(0), var_y(0), length(0);
 					if(IsValid(trajectory, mean_x, mean_y, var_x, var_y, length)) {
-//						PyObject *py_track_info = PyList_New(0);
-						PyObject *py_track_coords = PyList_New(0);
-						PyObject *py_track_traj = PyList_New(0);
-						PyObject *py_track_hog = PyList_New(0);
-						PyObject *py_track_hof = PyList_New(0);
-						PyObject *py_track_mbhx = PyList_New(0);
-						PyObject *py_track_mbhy = PyList_New(0);
-
-						// output the original trajectory coordinates mapped to original resolution
-                        for (int i = 0; i != trajectory_copy.size(); i++)
-                            PyList_Append(py_track_coords, Py_BuildValue("[ff]", trajectory_copy[i].x, trajectory_copy[i].y));
-
 						// for spatio-temporal pyramid
 						float x_pos = std::min<float>(std::max<float>(mean_x/float(seqInfo.width), 0), 0.999);
 						float y_pos = std::min<float>(std::max<float>(mean_y/float(seqInfo.height), 0), 0.999);
 						float t_pos = std::min<float>(std::max<float>((frame_num - trackInfo.length/2.0 - start_frame)/float(seqInfo.length), 0), 0.999);
-//						py_track_info = Py_BuildValue("ifffffffff", frame_num, mean_x, mean_y, var_x, var_y, length, fscales[iScale], x_pos, y_pos, t_pos);
-
-						// output the trajectory
-						for (int i = 0; i < trackInfo.length; ++i)
-							PyList_Append(py_track_traj, Py_BuildValue("[ff]", trajectory[i].x, trajectory[i].y));
-
-						PrintDesc(iTrack->hog, hogInfo, trackInfo, py_track_hog);
-						PrintDesc(iTrack->hof, hofInfo, trackInfo, py_track_hof);
-						PrintDesc(iTrack->mbhX, mbhInfo, trackInfo, py_track_mbhx);
-						PrintDesc(iTrack->mbhY, mbhInfo, trackInfo, py_track_mbhy);
-
-						// Using "N" does NOT increment the reference count. Using "O" WILL increment the reference count
-						// TODO: Need to check if the reference counting below is correct  "(NNNNNNN)"
-//						PyObject *py_track = Py_BuildValue("(NNNNNNN)", py_track_info, py_track_coords,
-                        PyObject *py_track = Py_BuildValue("(ifffffffffNNNNNN)",
-														   frame_num, mean_x, mean_y, var_x, var_y, length,
-														   fscales[iScale], x_pos, y_pos, t_pos,
-														   py_track_coords, py_track_traj, py_track_hog,
-														   py_track_hof, py_track_mbhx, py_track_mbhy);
-						PyList_Append(py_tracks, py_track);
+						std::vector<float> hog;
+						std::vector<float> hof;
+						std::vector<float> mbhX;
+						std::vector<float> mbhY;
+						PrintDesc(iTrack->hog, hogInfo, trackInfo, hog);
+						PrintDesc(iTrack->hof, hofInfo, trackInfo, hof);
+						PrintDesc(iTrack->mbhX, mbhInfo, trackInfo, mbhX);
+						PrintDesc(iTrack->mbhY, mbhInfo, trackInfo, mbhY);
+						valid_tracks.push_back(ValidTrack(frame_num, mean_x, mean_y,
+										var_x, var_y, length, fscales[iScale],
+										x_pos, y_pos, t_pos, trajectory_copy, trajectory,
+										hog, hof, mbhX, mbhY));
 					}
 
 					iTrack = tracks.erase(iTrack);
@@ -304,7 +344,66 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 	if( show_track == 1 )
 		destroyWindow("DenseTrack");
 
+	std::vector<std::list<Track> >().swap(xyScaleTracks);
+	std::vector<Mat>().swap(video);
+	image.release();
+	prev_grey.release();
+	grey.release();
+	std::vector<Mat>().swap(prev_grey_pyr);
+	std::vector<Mat>().swap(grey_pyr);
+	std::vector<Mat>().swap(flow_pyr);
+	std::vector<Mat>().swap(prev_poly_pyr);
+	std::vector<Mat>().swap(poly_pyr);
+
+	// See http://stackoverflow.com/questions/35774011/segment-fault-when-creating-pylist-new-in-python-c-extention
+	// for why we need line of code below
+	PyGILState_STATE gstate = PyGILState_Ensure();
+	if (PyArray_API == NULL) {
+		import_array();
+	}
+
+	int cell_size = nxy_cell * nxy_cell * nt_cell;
+	PyObject* dtype = PyList_New(0);
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "frame_num", "i", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mean_x", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mean_y", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "var_x", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "var_y", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "length", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "scale", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "x_pos", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "y_pos", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "t_pos", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, (i, i))", "coords", "f", track_length + 1, 2));
+	PyList_Append(dtype, Py_BuildValue("(s, s, (i, i))", "trajectory", "f", track_length, 2));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "hog", "f", 8 * cell_size));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "hof", "f", 9 * cell_size));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mbh_x", "f", 8 * cell_size));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mbh_y", "f", 8 * cell_size));
+	PyArray_Descr* descr;
+	PyArray_DescrConverter(dtype, &descr);
+	Py_DECREF(dtype);
+	npy_intp dims[] = {valid_tracks.size()};
+	PyArrayObject* py_tracks =
+		(PyArrayObject*) PyArray_NewFromDescr(&PyArray_Type, descr, 1, dims, NULL, NULL, 0, NULL);
+	if (!py_tracks) {
+		fprintf(stderr, "Error creating Numpy array\n");
+		PyGILState_Release(gstate);
+		Py_RETURN_NONE;
+	}
+
+	npy_intp stride = PyArray_STRIDES(py_tracks)[0];
+	char* bytes = PyArray_BYTES(py_tracks);
+	for (size_t i = 0; i < valid_tracks.size(); i++) {
+		PyObject* item = valid_tracks[i].toPython();
+		PyArray_SETITEM(py_tracks, bytes + (stride * i), item);
+		Py_DECREF(item);
+		// Clear the track data
+		ValidTrack tmp;
+		std::swap(tmp, valid_tracks[i]);
+	}
+
 	PyGILState_Release(gstate);
 
-	return py_tracks;
+	return (PyObject*) py_tracks;
 }
