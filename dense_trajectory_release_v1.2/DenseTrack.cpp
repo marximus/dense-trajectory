@@ -5,6 +5,9 @@
 
 #include <time.h>
 
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/arrayobject.h>
+
 using namespace cv;
 
 int show_track = 0; // set show_track = 1, if you want to visualize the trajectories
@@ -57,6 +60,7 @@ namespace {
 
 	private:
 		PyObject* toPython(const std::vector<float>& values) {
+			// This could be sped up more by creating a Numpy array here.
 			PyObject* py_list = PyList_New(values.size());
 			for (size_t i = 0; i < values.size(); i++)
 				PyList_SetItem(py_list, i, Py_BuildValue("f", values[i]));
@@ -354,16 +358,46 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 	// See http://stackoverflow.com/questions/35774011/segment-fault-when-creating-pylist-new-in-python-c-extention
 	// for why we need line of code below
 	PyGILState_STATE gstate = PyGILState_Ensure();
+	if (PyArray_API == NULL) {
+		import_array();
+	}
 
-	PyObject *py_tracks = PyList_New(valid_tracks.size());
+	int cell_size = nxy_cell * nxy_cell * nt_cell;
+	PyObject* dtype = PyList_New(0);
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "frame_num", "i", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mean_x", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mean_y", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "var_x", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "var_y", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "length", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "scale", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "x_pos", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "y_pos", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "t_pos", "f", 1));
+	PyList_Append(dtype, Py_BuildValue("(s, s, (i, i))", "coords", "f", track_length + 1, 2));
+	PyList_Append(dtype, Py_BuildValue("(s, s, (i, i))", "trajectory", "f", track_length, 2));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "hog", "f", 8 * cell_size));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "hof", "f", 9 * cell_size));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mbh_x", "f", 8 * cell_size));
+	PyList_Append(dtype, Py_BuildValue("(s, s, i)", "mbh_y", "f", 8 * cell_size));
+	PyArray_Descr* descr;
+	PyArray_DescrConverter(dtype, &descr);
+	Py_DECREF(dtype);
+	npy_intp dims[] = {valid_tracks.size()};
+	PyArrayObject* py_tracks =
+		(PyArrayObject*) PyArray_NewFromDescr(&PyArray_Type, descr, 1, dims, NULL, NULL, 0, NULL);
 	if (!py_tracks) {
-		fprintf(stderr, "Error creating python list\n");
+		fprintf(stderr, "Error creating Numpy array\n");
 		PyGILState_Release(gstate);
 		Py_RETURN_NONE;
 	}
 
+	npy_intp stride = PyArray_STRIDES(py_tracks)[0];
+	char* bytes = PyArray_BYTES(py_tracks);
 	for (size_t i = 0; i < valid_tracks.size(); i++) {
-		PyList_SetItem(py_tracks, i, valid_tracks[i].toPython());
+		PyObject* item = valid_tracks[i].toPython();
+		PyArray_SETITEM(py_tracks, bytes + (stride * i), item);
+		Py_DECREF(item);
 		// Clear the track data
 		ValidTrack tmp;
 		std::swap(tmp, valid_tracks[i]);
@@ -371,5 +405,5 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 
 	PyGILState_Release(gstate);
 
-	return py_tracks;
+	return (PyObject*) py_tracks;
 }
