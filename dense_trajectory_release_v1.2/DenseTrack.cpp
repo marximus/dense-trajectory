@@ -74,6 +74,20 @@ namespace {
 			return py_list;
 		}
 	};
+
+	class GILState {
+		PyGILState_STATE gstate;
+	public:
+		GILState() {
+			// See http://stackoverflow.com/questions/35774011/segment-fault-when-creating-pylist-new-in-python-c-extention
+			// for why we need line of code below
+			// Note that this is only needed for ctypes.CDLL and not for ctypes.PyDLL but does no harm for the latter.
+			gstate = PyGILState_Ensure();
+		}
+		~GILState() {
+			PyGILState_Release(gstate);
+		}
+	};
 }
 
 extern "C"
@@ -84,6 +98,18 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
                      int _poly_n, double _poly_sigma)
 {
 //	fprintf(stderr, "C++ - poly_sigma: %f\n", _poly_sigma);
+
+	GILState gstate;
+	if (PyArray_API == NULL) {
+		import_array();
+	}
+
+	std::vector<ValidTrack> valid_tracks;
+
+	// Note that this opens a block closed by Py_END_ALLOW_THREADS.
+	// https://docs.python.org/3/c-api/init.html#releasing-the-gil-from-extension-code
+	// Variables may need to be declared outside that block.
+	Py_BEGIN_ALLOW_THREADS
 
 	// create a vector of cv::mat to hold frames of video
 	std::vector<Mat> video;
@@ -142,8 +168,6 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 
 	std::vector<std::list<Track> > xyScaleTracks;
 	int init_counter = 0; // indicate when to detect new feature points
-
-	std::vector<ValidTrack> valid_tracks;
 
 //	while(true) {
 	for(std::vector<Mat>::size_type frame_num = 0; frame_num != video.size(); frame_num++) {
@@ -355,12 +379,7 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 	std::vector<Mat>().swap(prev_poly_pyr);
 	std::vector<Mat>().swap(poly_pyr);
 
-	// See http://stackoverflow.com/questions/35774011/segment-fault-when-creating-pylist-new-in-python-c-extention
-	// for why we need line of code below
-	PyGILState_STATE gstate = PyGILState_Ensure();
-	if (PyArray_API == NULL) {
-		import_array();
-	}
+	Py_END_ALLOW_THREADS
 
 	int cell_size = nxy_cell * nxy_cell * nt_cell;
 	// PyList_Append increases the ref count (unlike PyList_SetItem)
@@ -391,7 +410,6 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 		(PyArrayObject*) PyArray_NewFromDescr(&PyArray_Type, descr, 1, dims, NULL, NULL, 0, NULL);
 	if (!py_tracks) {
 		fprintf(stderr, "Error creating Numpy array\n");
-		PyGILState_Release(gstate);
 		Py_RETURN_NONE;
 	}
 
@@ -405,8 +423,6 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 		ValidTrack tmp;
 		std::swap(tmp, valid_tracks[i]);
 	}
-
-	PyGILState_Release(gstate);
 
 	return (PyObject*) py_tracks;
 }
