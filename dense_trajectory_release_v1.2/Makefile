@@ -23,7 +23,7 @@ BINDIR := $(BUILD)
 # libraries 
 LDLIBS = $(addprefix -l, $(LIBS) $(LIBS_$(notdir $*)))
 LIBS := \
-	opencv_core opencv_highgui opencv_videoio opencv_imgproc \
+	opencv_core opencv_highgui opencv_videoio opencv_imgproc opencv_imgcodecs \
 	avformat avdevice avutil avcodec swscale \
 	python${PYTHON_VER}
 
