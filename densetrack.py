@@ -6,6 +6,7 @@ https://docs.python.org/3/library/ctypes.html
 """
 import ctypes
 import os
+import locale
 
 import numpy as np
 import pandas as pd
@@ -30,7 +31,7 @@ _densetrack.argtypes = [
     ctypes.c_int,        # scale_num
     ctypes.c_int,        # init_gap
     ctypes.c_int,        # poly_n
-    ctypes.c_double      # poly_sigma
+    ctypes.c_double,     # poly_sigma
     ctypes.c_char_p      # image_pattern
 ]
 _densetrack.restype = ctypes.py_object
