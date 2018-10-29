@@ -14,7 +14,7 @@ from numpy.ctypeslib import ndpointer
 PARENTDIR = os.path.dirname(__file__)
 LIBPATH = os.path.join(PARENTDIR, "dense_trajectory_release_v1.2", "release", "DenseTrack.so")
 
-_lib = ctypes.CDLL(LIBPATH)
+_lib = ctypes.PyDLL(LIBPATH)
 
 _densetrack = _lib.densetrack
 _densetrack.argtypes = [
