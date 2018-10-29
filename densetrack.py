@@ -6,6 +6,7 @@ https://docs.python.org/3/library/ctypes.html
 """
 import ctypes
 import os
+import locale
 
 import numpy as np
 import pandas as pd
@@ -30,7 +31,8 @@ _densetrack.argtypes = [
     ctypes.c_int,        # scale_num
     ctypes.c_int,        # init_gap
     ctypes.c_int,        # poly_n
-    ctypes.c_double      # poly_sigma
+    ctypes.c_double,     # poly_sigma
+    ctypes.c_char_p      # image_pattern
 ]
 _densetrack.restype = ctypes.py_object
 
@@ -46,6 +48,7 @@ def densetrack(
         init_gap=1,
         poly_n=7,
         poly_sigma=1.5,  # used in Farneback method in C++ code
+        image_pattern=None
 ):
     """Compute dense trajectories for video.
 
@@ -109,10 +112,11 @@ def densetrack(
     if not video.flags['C_CONTIGUOUS']:
         video = np.ascontiguousarray(video)
 
+    image_pattern = image_pattern and image_pattern.encode(locale.getdefaultlocale()[1] or 'UTF-8')
     data = _densetrack(
         video, video.shape[0], video.shape[1], video.shape[2],
         track_length, min_distance, patch_size, nxy_cell, nt_cell, scale_num, init_gap,
-        poly_n, poly_sigma
+        poly_n, poly_sigma, image_pattern
     )
 
     # tracks = [dict(zip(ret_fields, track)) for track in data]  # uncomment to return list

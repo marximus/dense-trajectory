@@ -88,6 +88,31 @@ namespace {
 			PyGILState_Release(gstate);
 		}
 	};
+
+	int createDirectory(const char* path) {
+		const char* end = strrchr(path, '/');
+		if (end == NULL || end == path)
+			return 0;
+		size_t len = end - path;
+		char dir_path[300];
+		if (len + 1 > sizeof(dir_path)) {
+			errno = ENAMETOOLONG;
+			return -1;
+		}
+		memcpy(dir_path, path, len);
+		dir_path[len] = '\0';
+		for (char* p = dir_path + 1; *p; p++) {
+			if (*p == '/') {
+				*p = '\0';
+				if (mkdir(dir_path, S_IRWXU) < 0 && errno != EEXIST)
+					return -1;
+				*p = '/';
+			}
+		}
+		if (mkdir(dir_path, S_IRWXU) < 0 && errno != EEXIST)
+			return -1;
+		return 0;
+	}
 }
 
 extern "C"
@@ -95,7 +120,7 @@ extern "C"
 PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols, int _track_length, 
                      int _min_distance, int _patch_size, int _nxy_cell, int _nt_cell, 
                      int _scale_num, int _init_gap, 
-                     int _poly_n, double _poly_sigma)
+                     int _poly_n, double _poly_sigma, const char* image_pattern)
 {
 //	fprintf(stderr, "C++ - poly_sigma: %f\n", _poly_sigma);
 
@@ -168,6 +193,7 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 
 	std::vector<std::list<Track> > xyScaleTracks;
 	int init_counter = 0; // indicate when to detect new feature points
+	bool first_image = true;
 
 //	while(true) {
 	for(std::vector<Mat>::size_type frame_num = 0; frame_num != video.size(); frame_num++) {
@@ -187,7 +213,8 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 
 //		if(frame_num == start_frame) {
 		if(frame_num == 0) {
-			image.create(frame.size(), CV_8UC3);
+			if (show_track == 1 || image_pattern != NULL)
+				image.create(frame.size(), CV_8UC3);
 			grey.create(frame.size(), CV_8UC1);
 			prev_grey.create(frame.size(), CV_8UC1);
 
@@ -207,7 +234,8 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 //			frame.copyTo(image);
 //			cvtColor(image, prev_grey, CV_BGR2GRAY);
 			frame.copyTo(prev_grey);
-			cvtColor(frame, image, CV_GRAY2BGR);
+			if (show_track == 1 || image_pattern != NULL)
+				cvtColor(frame, image, CV_GRAY2BGR);
 
 			for(int iScale = 0; iScale < scale_num; iScale++) {
 				if(iScale == 0)
@@ -237,7 +265,8 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 //		frame.copyTo(image);
 //		cvtColor(image, grey, CV_BGR2GRAY);
 		frame.copyTo(grey);
-		cvtColor(frame, image, CV_GRAY2BGR);
+		if (show_track == 1 || image_pattern != NULL)
+			cvtColor(frame, image, CV_GRAY2BGR);
 
 		// compute optical flow for all scales once
 		//my::FarnebackPolyExpPyr(grey, poly_pyr, fscales, 7, 1.5);
@@ -291,7 +320,7 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 				iTrack->addPoint(point);
 
 				// draw the trajectories at the first scale
-				if(show_track == 1 && iScale == 0)
+				if((show_track == 1 || image_pattern != NULL) && iScale == 0)
 					DrawTrack(iTrack->point, iTrack->index, fscales[iScale], image);
 
 				// if the trajectory achieves the maximal length
@@ -363,6 +392,25 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 			c = cvWaitKey(3);
 			if((char)c == 27) break;
 		}
+		if (image_pattern != NULL) {
+			char path[300];
+			snprintf(path, sizeof(path), image_pattern, frame_num);
+			if (first_image) {
+				first_image = false;
+				if (createDirectory(path) < 0) {
+					Py_BLOCK_THREADS
+					return PyErr_SetFromErrno(PyExc_OSError);
+				}
+			}
+			try {
+				cv::imwrite(path, image);
+			}
+			catch (const cv::Exception& ex) {
+				Py_BLOCK_THREADS
+				PyErr_SetString(PyExc_RuntimeError, ex.what());
+				Py_RETURN_NONE;
+			}
+		}
 	}
 
 	if( show_track == 1 )
@@ -405,7 +453,8 @@ PyObject* densetrack(unsigned char *frames, size_t len, size_t rows, size_t cols
 	PyArray_Descr* descr;
 	PyArray_DescrConverter(dtype, &descr);
 	Py_DECREF(dtype);
-	npy_intp dims[] = {valid_tracks.size()};
+	npy_intp dims[1];
+	dims[0] = valid_tracks.size();
 	PyArrayObject* py_tracks =
 		(PyArrayObject*) PyArray_NewFromDescr(&PyArray_Type, descr, 1, dims, NULL, NULL, 0, NULL);
 	if (!py_tracks) {
